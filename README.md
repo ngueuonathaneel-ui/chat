@@ -1,36 +1,169 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🔐 Real-Time Messenger
 
-## Getting Started
+Application de messagerie temps réel sécurisée avec chiffrement End-to-End (E2E), 2FA, et design moderne.
 
-First, run the development server:
+[![Stack](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
+[![Stack](https://img.shields.io/badge/React-19-blue)](https://react.dev)
+[![Stack](https://img.shields.io/badge/TypeScript-5-blue)](https://typescriptlang.org)
+[![Stack](https://img.shields.io/badge/Tailwind-4-cyan)](https://tailwindcss.com)
+[![Stack](https://img.shields.io/badge/Prisma-5-green)](https://prisma.io)
+[![Security](https://img.shields.io/badge/E2E-libsodium-purple)](https://libsodium.gitbook.io/doc/)
+
+## ✨ Features
+
+### 🔒 Sécurité
+
+- **Chiffrement E2E** - Curve25519 + XSalsa20-Poly1305 (libsodium)
+- **2FA TOTP** - Authentification à deux facteurs avec QR code
+- **Session sécurisée** - JWT + Redis avec invalidation côté serveur
+- **Headers sécurisés** - CSP, X-Frame-Options, HSTS
+
+### ⚡ Real-time
+
+- **Socket.IO** - WebSocket avec fallback polling
+- **Typing indicators** - Throttle + Debounce hybride optimisé
+- **Online presence** - Statuts temps réel (online/away/offline)
+- **Redis Pub/Sub** - Scaling horizontal multi-instances
+
+### 🎨 Design
+
+- **Dark mode natif** - Switch automatique sans compromis
+- **Micro-interactions** - Animations Framer Motion fluides
+- **Responsive** - Mobile-first avec breakpoints xs → xl
+- **Accessibility** - WCAG 2.1 AA, prefers-reduced-motion
+
+### 🧠 Algorithmes avancés
+
+- **Pagination cursor-based** - O(log n) avec index composite
+- **Déduplication** - Hash SHA-256 + fenêtre temporelle
+- **Full-Text Search** - PostgreSQL GIN + TF-IDF ranking
+- **Rate limiting** - SLIDE window algorithm avec Redis Sorted Sets
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- PostgreSQL 16+
+- Redis 7+
+- pnpm (recommandé)
+
+### Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# 1. Clone et installation
+pnpm install
+
+# 2. Configuration
+cp .env.example .env
+# Éditer .env avec vos valeurs
+
+# 3. Database
+pnpm prisma migrate dev
+pnpm prisma generate
+
+# 4. Développement
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Docker (Production)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# Lancer l'infrastructure complète
+docker-compose up -d
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Avec services IA optionnels
+docker-compose --profile ai up -d
+```
 
-## Learn More
+## 📁 Structure du Projet
 
-To learn more about Next.js, take a look at the following resources:
+```
+chat/
+├── app/
+│   ├── (auth)/          # Routes auth (login, register)
+│   ├── (chat)/          # Routes protégées (conversations)
+│   └── api/             # API routes
+├── components/
+│   ├── chat/            # Composants métier (MessageBubble, Composer, etc.)
+│   └── ui/              # Composants Shadcn/UI
+├── hooks/               # Hooks custom (useSocket, useMessages, useTyping)
+├── lib/                 # Utilities (crypto, redis, prisma)
+├── server/              # Socket.IO server
+├── types/               # Types TypeScript
+└── docs/                # Documentation complète
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🔐 Architecture E2E
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+Alice                           Bob
+  │                              │
+  │  1. Génère clés X25519      │
+  │  (sk_A, pk_A)               │
+  │                              │
+  │  2. Échange pk via serveur  │
+  │◄───────────────────────────►│
+  │                              │
+  │  3. Secret partagé:         │  Secret partagé:
+  │     DH(sk_A, pk_B)          │     DH(sk_B, pk_A)
+  │        = [ab]G              │        = [ab]G
+  │                              │
+  │  4. Chiffre avec XSalsa20   │  5. Déchiffre
+  │     + Poly1305 MAC          │
+```
 
-## Deploy on Vercel
+**Mathématiques:** Curve25519 sur F(2^255 - 19), sécurité ~2^125 opérations
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📊 Performance
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Métrique      | Valeur   | Optimisation                                    |
+| ------------- | -------- | ----------------------------------------------- |
+| Pagination    | O(log n) | Index composite (conversationId, createdAt, id) |
+| Déduplication | O(1)     | Hash Set avec eviction LRU                      |
+| Rate limiting | O(log n) | Redis ZSET SLIDE window                         |
+| Reconnection  | <100ms   | Exponential backoff + sticky sessions           |
+
+## 🧪 Tests
+
+```bash
+# Tests unitaires
+pnpm test
+
+# Tests E2E
+pnpm test:e2e
+
+# Linting
+pnpm lint
+
+# Type checking
+pnpm tsc --noEmit
+```
+
+## 📚 Documentation
+
+Voir le dossier [`docs/`](./docs) pour:
+
+- [ARCHITECTURE.md](./docs/ARCHITECTURE.md) - C4 Model, flux de données
+- [DESIGN.md](./docs/DESIGN.md) - Design system, tokens, animations
+- [ALGORITHMS.md](./docs/ALGORITHMS.md) - Mathématiques et complexités
+- [SECURITY.md](./docs/SECURITY.md) - Threat model, E2E protocol
+- [API.md](./docs/API.md) - Events Socket.IO, REST endpoints
+
+## 🤝 Contributing
+
+1. Fork le projet
+2. Créer une branche (`git checkout -b feature/amazing`)
+3. Commit (`git commit -m 'feat: add amazing'`)
+4. Push (`git push origin feature/amazing`)
+5. Ouvrir une Pull Request
+
+## 📄 License
+
+MIT License - voir [LICENSE](./LICENSE) pour les détails.
+
+---
+
+<p align="center">
+  Construit avec ❤️ et 🔒 chiffrement E2E
+</p>

@@ -1,0 +1,164 @@
+// Real-Time Messenger - Prisma Schema
+// Architecture: PostgreSQL + GIN FTS + Relations optimisées
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// Modèle User
+// ─────────────────────────────────────────────
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  username  String   @unique
+  password  String   // Hash bcrypt
+  avatarUrl String?
+  
+  // 2FA TOTP
+  twoFactorSecret   String? // Base32 secret (chiffré at rest)
+  twoFactorEnabled  Boolean @default(false)
+  twoFactorVerified Boolean @default(false)
+  
+  // E2E Keys - clé publique seulement (Curve25519)
+  publicKey String? @db.Text
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  sentMessages     Message[]
+  conversations    ConversationMember[]
+  reactions        Reaction[]
+  
+  @@index([email])
+  @@index([username])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// Modèle Conversation
+// ─────────────────────────────────────────────
+model Conversation {
+  id          String    @id @default(uuid()) @db.Uuid
+  title       String?
+  isGroup     Boolean   @default(false)
+  avatarUrl   String?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  members     ConversationMember[]
+  messages    Message[]
+  
+  @@index([updatedAt(sort: Desc)])
+  @@map("conversations")
+}
+
+// ─────────────────────────────────────────────
+// Modèle ConversationMember (junction table)
+// ─────────────────────────────────────────────
+model ConversationMember {
+  id              String       @id @default(uuid()) @db.Uuid
+  conversationId  String       @db.Uuid
+  userId          String       @db.Uuid
+  role            MemberRole   @default(MEMBER)
+  joinedAt        DateTime     @default(now())
+  lastReadAt      DateTime?
+  
+  // Relations
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([conversationId, userId])
+  @@index([userId, joinedAt])
+  @@map("conversation_members")
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// ─────────────────────────────────────────────
+// Modèle Message
+// ─────────────────────────────────────────────
+model Message {
+  id              String   @id @default(uuid()) @db.Uuid
+  conversationId  String   @db.Uuid
+  senderId        String   @db.Uuid
+  
+  // Contenu chiffré (ciphertext base64)
+  content         String   @db.Text
+  nonce           String   @db.Text
+  
+  // Métadonnées
+  type            MessageType @default(TEXT)
+  fileUrl         String?
+  fileName        String?
+  fileSize        Int?
+  mimeType        String?
+  duration        Int?     // Secondes (messages vocaux)
+  
+  // Algorithme: déduplication - hash SHA-256
+  dedupHash       String   @unique
+  
+  // Pin
+  pinned          Boolean  @default(false)
+  pinnedAt        DateTime?
+  
+  // Reply
+  replyToId       String?  @db.Uuid
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender          User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  reactions       Reaction[]
+  replyTo         Message?     @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies         Message[]    @relation("MessageReplies")
+  
+  // Index: pagination cursor-based O(log n)
+  @@index([conversationId, createdAt(sort: Desc), id])
+  @@index([senderId, createdAt])
+  @@index([dedupHash])
+  @@index([pinned, pinnedAt])
+  @@map("messages")
+}
+
+enum MessageType {
+  TEXT
+  VOICE
+  FILE
+  LINK_PREVIEW
+}
+
+// ─────────────────────────────────────────────
+// Modèle Reaction (Emoji-mart)
+// ─────────────────────────────────────────────
+model Reaction {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @db.Uuid
+  userId    String   @db.Uuid
+  emoji     String   // Unicode emoji
+  createdAt DateTime @default(now())
+  
+  // Relations
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("reactions")
+}

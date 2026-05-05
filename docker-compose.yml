@@ -1,0 +1,165 @@
+# Docker Compose - Real-Time Messenger Infrastructure
+# 
+# Stack:
+# - Next.js (frontend + API routes)
+# - PostgreSQL 16 (database)
+# - Redis 7 (pub/sub, sessions, rate limiting)
+# - Optional: llama.cpp (AI summaries)
+# - Optional: LibreTranslate (translation)
+
+version: '3.8'
+
+services:
+  # ─────────────────────────────────────────────
+  # Next.js Application
+  # ─────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/messenger
+      
+      # Redis
+      - REDIS_URL=redis://redis:6379
+      
+      # Auth
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-change_me_in_production}
+      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
+      
+      # Encryption
+      - MASTER_ENCRYPTION_KEY=${MASTER_ENCRYPTION_KEY:-change_me_in_production}
+      
+      # Uploads
+      - UPLOAD_DIR=/app/uploads
+      - CDN_BASE_URL=${CDN_BASE_URL:-http://localhost:3000/uploads}
+      
+      # AI Services (optional)
+      - LLAMA_API_URL=${LLAMA_API_URL:-}
+      - LIBRETRANSLATE_URL=${LIBRETRANSLATE_URL:-}
+      
+      # App
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - messenger
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ─────────────────────────────────────────────
+  # PostgreSQL Database
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=messenger
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./prisma/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - messenger
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Redis Cache & Pub/Sub
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - messenger
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # Optional: llama.cpp (AI Summaries)
+  # ─────────────────────────────────────────────
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    profiles:
+      - ai
+    command: >
+      -m /models/llama-3-8b-Q4_K_M.gguf
+      -c 4096
+      -np 4
+      --host 0.0.0.0
+      --port 8080
+    volumes:
+      - ./models:/models:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - messenger
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # Optional: LibreTranslate
+  # ─────────────────────────────────────────────
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    profiles:
+      - ai
+    environment:
+      - LT_LOAD_ONLY=fr,en,es,de,it,pt,ar,zh,ja,ru
+    volumes:
+      - libretranslate_data:/home/libretranslate/.local
+    ports:
+      - "5000:5000"
+    networks:
+      - messenger
+    restart: unless-stopped
+
+# ─────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads:
+    driver: local
+  libretranslate_data:
+    driver: local
+
+# ─────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────
+networks:
+  messenger:
+    driver: bridge
