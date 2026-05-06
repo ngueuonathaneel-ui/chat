@@ -40,7 +40,7 @@ export async function GET(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Build cursor filter
+    // Build cursor filter (ASC order)
     let cursorFilter = {};
     if (cursor) {
       try {
@@ -48,8 +48,8 @@ export async function GET(
         const [timestamp, id] = decoded.split("::");
         cursorFilter = {
           OR: [
-            { createdAt: { lt: new Date(timestamp) } },
-            { createdAt: { equals: new Date(timestamp) }, id: { lt: id } },
+            { createdAt: { gt: new Date(timestamp) } },
+            { createdAt: { equals: new Date(timestamp) }, id: { gt: id } },
           ],
         };
       } catch {
@@ -57,13 +57,13 @@ export async function GET(
       }
     }
 
-    // Fetch messages with cursor-based pagination
+    // Fetch messages with cursor-based pagination (ASC pour afficher plus récents en bas)
     const messages = await prisma.message.findMany({
       where: {
         conversationId,
         ...cursorFilter,
       },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: limit + 1,
       include: {
         sender: {

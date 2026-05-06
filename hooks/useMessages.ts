@@ -244,7 +244,7 @@ export function useMessages(conversationId: string): UseMessagesReturn {
       );
 
       seenHashesRef.current.add(payload.dedupHash);
-      setMessages((prev) => [{ ...payload, decryptedContent }, ...prev]);
+      setMessages((prev) => [...prev, { ...payload, decryptedContent }]);
     };
 
     const handleSent = (payload: {
@@ -370,7 +370,7 @@ export function useMessages(conversationId: string): UseMessagesReturn {
         reactions: [],
       };
 
-      setMessages((prev) => [optimisticMessage, ...prev]);
+      setMessages((prev) => [...prev, optimisticMessage]);
 
       // Envoyer via Socket.IO
       emit("message:send", {

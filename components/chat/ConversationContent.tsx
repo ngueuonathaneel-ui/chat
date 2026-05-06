@@ -20,7 +20,7 @@ export function ConversationContent({
 
   const handleSend = async (
     content: string,
-    type: "TEXT" | "VOICE",
+    type: "TEXT" | "VOICE" | "FILE",
     options?: { fileUrl?: string },
   ) => {
     // Chiffrement E2E (stub temporaire - à remplacer par libsodium)

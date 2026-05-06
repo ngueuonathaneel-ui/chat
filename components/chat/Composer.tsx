@@ -20,12 +20,14 @@ import { cn } from "@/lib/utils";
 import { Send, Paperclip, Mic, Smile, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTyping } from "@/hooks/useTyping";
+import data from "@emoji-mart/data";
+import Picker from "@emoji-mart/react";
 
 interface ComposerProps {
   conversationId: string;
   onSend?: (
     content: string,
-    type: "TEXT" | "VOICE",
+    type: "TEXT" | "VOICE" | "FILE",
     options?: { fileUrl?: string },
   ) => void;
   onTyping?: () => void;
@@ -106,11 +108,30 @@ export function Composer({
         if (e.data.size > 0) chunks.push(e.data);
       };
 
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         const blob = new Blob(chunks, { type: "audio/webm" });
-        // TODO: Upload and send voice message
-        console.log("Recording stopped", blob.size);
         stream.getTracks().forEach((track) => track.stop());
+
+        // Upload audio file
+        try {
+          const formData = new FormData();
+          formData.append("file", blob, `voice_${Date.now()}.webm`);
+          formData.append("conversationId", conversationId);
+
+          const uploadRes = await fetch("/api/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!uploadRes.ok) throw new Error("Upload failed");
+
+          const { url } = await uploadRes.json();
+
+          // Send voice message
+          onSend?.("", "VOICE", { fileUrl: url });
+        } catch (error) {
+          console.error("Failed to upload voice message:", error);
+        }
       };
 
       mediaRecorderRef.current = mediaRecorder;
@@ -154,31 +175,40 @@ export function Composer({
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files);
-    // TODO: Handle file upload
-    console.log("Dropped files:", files);
-  }, []);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 0) return;
 
-  // Emoji picker (simplified)
-  const commonEmojis = [
-    "👍",
-    "❤️",
-    "😂",
-    "😮",
-    "😢",
-    "🙏",
-    "🔥",
-    "👏",
-    "🎉",
-    "🤔",
-  ];
+      try {
+        const file = files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("conversationId", conversationId);
 
-  const insertEmoji = useCallback((emoji: string) => {
-    setText((prev) => prev + emoji);
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!uploadRes.ok) throw new Error("Upload failed");
+
+        const { url } = await uploadRes.json();
+
+        // Send file message
+        onSend?.("", "FILE", { fileUrl: url });
+      } catch (error) {
+        console.error("Failed to upload file:", error);
+      }
+    },
+    [conversationId, onSend],
+  );
+
+  const insertEmoji = useCallback((emoji: { native: string }) => {
+    setText((prev) => prev + emoji.native);
     setShowEmojiPicker(false);
     textareaRef.current?.focus();
   }, []);
@@ -249,18 +279,14 @@ export function Composer({
 
             {/* Emoji picker popover */}
             {showEmojiPicker && (
-              <div className="absolute bottom-full right-0 mb-2 p-3 bg-background rounded-xl shadow-lg border border-border z-20">
-                <div className="grid grid-cols-5 gap-2">
-                  {commonEmojis.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => insertEmoji(emoji)}
-                      className="text-xl p-1.5 hover:bg-accent rounded-lg transition-colors"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
+              <div className="absolute bottom-full right-0 mb-2 z-20">
+                <Picker
+                  data={data}
+                  onEmojiSelect={insertEmoji}
+                  theme="auto"
+                  previewPosition="none"
+                  skinTonePosition="search"
+                />
               </div>
             )}
           </div>
