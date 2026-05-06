@@ -48,7 +48,9 @@ export default async function ConversationPage({ params }: PageProps) {
   }
 
   // Format pour le header
-  const otherMembers = conversation.members.filter((m) => m.role !== "OWNER");
+  const otherMembers = conversation.members.filter(
+    (m: any) => m.role !== "OWNER",
+  );
   const title = conversation.isGroup
     ? conversation.title || "Groupe sans nom"
     : otherMembers[0]?.user.username || "Inconnu";
