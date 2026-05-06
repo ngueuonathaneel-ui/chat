@@ -5,7 +5,7 @@
  * Sécurité: Validation Zod côté serveur pour tous les payloads
  */
 
-import type { MessageType, MemberRole } from "@/lib/generated/prisma/client";
+import type { MessageType, MemberRole } from "@prisma/client";
 
 // ─────────────────────────────────────────────
 // Client → Server Events
